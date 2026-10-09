@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AgyChatLadder (对话天梯)
 // @namespace    https://github.com/SuperRui0122/AgyChatLadder
-// @version      1.2.0
-// @description  Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、智能悬停预览与多分屏）
+// @version      1.3.0
+// @description  Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、独立悬浮预览卡片与多分屏深度感知）
 // @author       SuperRui0122
 // @match        *://*/*
 // @grant        none
@@ -10,18 +10,28 @@
 // ==/UserScript==
 
 /**
- * AgyChatLadder (对话天梯) - v1.2.0
- * Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、智能悬停预览与多分屏）
+ * AgyChatLadder (对话天梯) - v1.3.0
+ * Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、独立悬浮预览卡片与多分屏深度感知）
  * GitHub: https://github.com/SuperRui0122/AgyChatLadder
  * 
  * - 图标规范: 登顶首提为上下双重 ^ 叠层, 上一问为单 ^, 下一问为单 v, 触底最新为双重 v 叠层
- * - 智能悬停: 鼠标悬停踏板圆点展示第 N 问与提问摘要预览；悬停按键展示功能说明；无遮挡轻量弹出
+ * - 独立悬浮预览卡片: 悬停踏板圆点实时展示第 N 问与提问前 50 字精简摘要；悬停按键展示功能说明；脱离容器防裁剪
  * - 多分屏感知: 自动识别左右/上下分屏视口，各自独立挂载专属天梯与滚动控制器
  * - 原生隔离容器 offsetTop 毫秒级原生平滑滚动
- * - 静态常亮翠绿踏板圆点，无闪烁
+ * - 静态常亮翠绿踏板圆点，触感灵动，无晃眼闪烁
  */
 (function () {
   'use strict';
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function initLadderSystem() {
     try {
@@ -132,16 +142,16 @@
         }
 
         .ladder-dot {
-          width: 9px;
-          height: 9px;
+          width: 8px;
+          height: 8px;
           border-radius: 50%;
           background: rgba(255, 255, 255, 0.35);
           transition: background 0.15s ease, transform 0.15s ease;
           pointer-events: none;
         }
         .ladder-dot-wrap:hover .ladder-dot {
-          background: #3b82f6;
-          transform: scale(1.4);
+          background: #38bdf8 !important;
+          transform: scale(1.5) !important;
         }
         .ladder-dot-wrap.active .ladder-dot {
           background: #10b981 !important;
@@ -150,66 +160,66 @@
           animation: none !important;
         }
 
-        /* 精致悬停提示框 (Hover Tooltip) */
-        .ladder-tooltip {
+        /* 独立脱离裁剪的悬浮预览卡片 (Floating Tooltip) */
+        .ladder-floating-tooltip {
           position: absolute !important;
-          right: calc(100% + 12px) !important;
-          top: 50% !important;
-          transform: translateY(-50%) scale(0.95) !important;
-          background: rgba(16, 18, 24, 0.96) !important;
-          backdrop-filter: blur(12px) !important;
-          -webkit-backdrop-filter: blur(12px) !important;
-          border: 1px solid rgba(255, 255, 255, 0.18) !important;
-          box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55) !important;
-          border-radius: 7px !important;
-          padding: 6px 10px !important;
+          right: calc(100% + 14px) !important;
+          top: 50%;
+          transform: translateY(-50%) scale(0.96) !important;
+          background: rgba(15, 18, 26, 0.96) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65) !important;
+          border-radius: 8px !important;
+          padding: 7px 12px !important;
           color: #f3f4f6 !important;
           font-size: 11px !important;
-          line-height: 1.4 !important;
-          white-space: nowrap !important;
-          max-width: 280px !important;
+          line-height: 1.45 !important;
           pointer-events: none !important;
           opacity: 0 !important;
           visibility: hidden !important;
-          transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease !important;
-          z-index: 100 !important;
+          transition: opacity 0.15s ease, transform 0.15s ease, top 0.1s ease !important;
+          z-index: 99999 !important;
           text-align: left !important;
+          min-width: 130px !important;
+          max-width: 270px !important;
+          white-space: normal !important;
+          word-break: break-word !important;
         }
-
-        /* 气泡三角指示标 */
-        .ladder-tooltip::after {
+        .ladder-floating-tooltip.show {
+          opacity: 1 !important;
+          visibility: visible !important;
+          transform: translateY(-50%) scale(1) !important;
+        }
+        .ladder-floating-tooltip::after {
           content: '';
           position: absolute;
           left: 100%;
           top: 50%;
           transform: translateY(-50%);
-          border-width: 5px;
+          border-width: 6px;
           border-style: solid;
-          border-color: transparent transparent transparent rgba(16, 18, 24, 0.96);
+          border-color: transparent transparent transparent rgba(15, 18, 26, 0.96);
         }
-
-        .ladder-btn:hover .ladder-tooltip,
-        .ladder-dot-wrap:hover .ladder-tooltip {
-          opacity: 1 !important;
-          visibility: visible !important;
-          transform: translateY(-50%) scale(1) !important;
-        }
-
-        .ladder-tooltip-title {
+        .ladder-floating-tooltip-title {
           font-weight: 600;
           color: #10b981;
+          font-size: 12px;
           margin-bottom: 2px;
           display: flex;
           align-items: center;
           gap: 4px;
         }
-
-        .ladder-tooltip-text {
-          color: #e5e7eb;
+        .ladder-floating-tooltip-text {
+          color: #d1d5db;
+          font-size: 11px;
+          max-height: 65px;
           overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          max-width: 250px;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          line-height: 1.4;
         }
       `;
 
@@ -227,6 +237,18 @@
 
       function getTurnsData(sc) {
         if (!sc) return [];
+        const userPrompts = Array.from(sc.querySelectorAll('.md-sticky-message-bleed, [class*="user-input-step"]'));
+        if (userPrompts.length > 0) {
+          return userPrompts.map((it, idx) => {
+            let raw = (it.textContent || '').trim().replace(/\s+/g, ' ');
+            raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim(); // 过滤时间戳
+            return {
+              el: it,
+              offsetTop: it.offsetTop,
+              text: raw.length > 55 ? raw.slice(0, 55) + '...' : raw
+            };
+          });
+        }
         const list = sc.querySelector('.relative.flex.flex-col.gap-y-3') || sc.querySelector('.relative.w-full');
         if (list) {
           const items = Array.from(list.querySelectorAll(':scope > div.flex.items-start, :scope > div[class*="flex"][class*="items-start"]'));
@@ -234,39 +256,16 @@
             return items.map((it, idx) => {
               const userTextEl = it.querySelector('.md-sticky-message-bleed') || it.querySelector('[class*="user-input"]') || it;
               let raw = (userTextEl.textContent || '').trim().replace(/\s+/g, ' ');
-              raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim(); // 过滤末尾时间戳
+              raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim();
               return {
                 el: it,
                 offsetTop: it.offsetTop,
-                text: raw.length > 50 ? raw.slice(0, 50) + '...' : raw
+                text: raw.length > 55 ? raw.slice(0, 55) + '...' : raw
               };
             });
           }
         }
-        const userPrompts = Array.from(sc.querySelectorAll('.md-sticky-message-bleed, [class*="user-input-step"]'));
-        if (userPrompts.length > 0) {
-          return userPrompts.map((it, idx) => {
-            let raw = (it.textContent || '').trim().replace(/\s+/g, ' ');
-            raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim();
-            return {
-              el: it,
-              offsetTop: it.offsetTop,
-              text: raw.length > 50 ? raw.slice(0, 50) + '...' : raw
-            };
-          });
-        }
         return [];
-      }
-
-      function createTooltip(title, text) {
-        const tip = document.createElement('div');
-        tip.className = 'ladder-tooltip';
-        if (text) {
-          tip.innerHTML = `<div class="ladder-tooltip-title">${title}</div><div class="ladder-tooltip-text">${text}</div>`;
-        } else {
-          tip.innerHTML = `<div class="ladder-tooltip-text" style="font-weight: 600;">${title}</div>`;
-        }
-        return tip;
       }
 
       function mountLadderToPane(sc) {
@@ -287,6 +286,47 @@
 
         const rail = document.createElement('div');
         rail.className = 'agy-chat-ladder-rail';
+
+        // 独立悬浮预览卡片
+        const floatingTip = document.createElement('div');
+        floatingTip.className = 'ladder-floating-tooltip';
+        rail.appendChild(floatingTip);
+
+        function showTip(targetEl, title, text) {
+          const rRect = rail.getBoundingClientRect();
+          const tRect = targetEl.getBoundingClientRect();
+          const relTop = (tRect.top + tRect.height / 2) - rRect.top;
+          floatingTip.style.top = `${relTop}px`;
+          if (text) {
+            floatingTip.innerHTML = `<div class="ladder-floating-tooltip-title">${escapeHtml(title)}</div><div class="ladder-floating-tooltip-text">${escapeHtml(text)}</div>`;
+          } else {
+            floatingTip.innerHTML = `<div class="ladder-floating-tooltip-title" style="margin-bottom: 0;">${escapeHtml(title)}</div>`;
+          }
+          floatingTip.classList.add('show');
+        }
+
+        function hideTip() {
+          floatingTip.classList.remove('show');
+        }
+
+        // 使用事件委托统一监听悬停，绝不随 render() 节点刷新而丢失
+        rail.addEventListener('mouseover', (e) => {
+          const btn = e.target.closest('.ladder-btn');
+          const dot = e.target.closest('.ladder-dot-wrap');
+          if (btn && btn.__ladderTip) {
+            showTip(btn, btn.__ladderTip.title, btn.__ladderTip.text);
+            return;
+          }
+          if (dot && dot.__ladderTip) {
+            showTip(dot, dot.__ladderTip.title, dot.__ladderTip.text);
+            return;
+          }
+          hideTip();
+        });
+
+        rail.addEventListener('mouseleave', () => {
+          hideTip();
+        });
 
         let currentActive = 0;
         let turnsCache = [];
@@ -314,7 +354,7 @@
         const firstBtn = document.createElement('div');
         firstBtn.className = 'ladder-btn';
         firstBtn.innerHTML = ICONS.topDouble;
-        firstBtn.appendChild(createTooltip('登顶首提', '瞬时跳转至第一个问题'));
+        firstBtn.__ladderTip = { title: '登顶首提', text: '瞬时直达会话首个提问' };
         firstBtn.onclick = (e) => {
           e.stopPropagation();
           if (turnsCache.length > 0) scrollToTurn(0);
@@ -325,7 +365,7 @@
         const prevBtn = document.createElement('div');
         prevBtn.className = 'ladder-btn';
         prevBtn.innerHTML = ICONS.upSingle;
-        prevBtn.appendChild(createTooltip('上一问', '回跳至上一个提问'));
+        prevBtn.__ladderTip = { title: '上一问', text: '返回上一个提问轮次' };
         prevBtn.onclick = (e) => {
           e.stopPropagation();
           scrollToTurn(currentActive - 1);
@@ -339,7 +379,7 @@
         const nextBtn = document.createElement('div');
         nextBtn.className = 'ladder-btn';
         nextBtn.innerHTML = ICONS.downSingle;
-        nextBtn.appendChild(createTooltip('下一问', '顺流前往下一个提问'));
+        nextBtn.__ladderTip = { title: '下一问', text: '顺流前往下一个提问' };
         nextBtn.onclick = (e) => {
           e.stopPropagation();
           scrollToTurn(currentActive + 1);
@@ -349,7 +389,7 @@
         const lastBtn = document.createElement('div');
         lastBtn.className = 'ladder-btn';
         lastBtn.innerHTML = ICONS.bottomDouble;
-        lastBtn.appendChild(createTooltip('触底最新', '瞬时直达最新生成的回复'));
+        lastBtn.__ladderTip = { title: '触底最新', text: '瞬时直达最新生成的回复' };
         lastBtn.onclick = (e) => {
           e.stopPropagation();
           sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
@@ -369,7 +409,7 @@
             const dot = document.createElement('div');
             dot.className = 'ladder-dot';
             wrap.appendChild(dot);
-            wrap.appendChild(createTooltip('会话就绪', ''));
+            wrap.__ladderTip = { title: '会话就绪', text: '当前暂无更多提问轮次' };
             dotsContainer.appendChild(wrap);
             return;
           }
@@ -381,10 +421,11 @@
             dot.className = 'ladder-dot';
             wrap.appendChild(dot);
 
-            // 悬停预览 (显示第几问及问题文字摘要)
-            const tipTitle = `第 ${i + 1} 问`;
-            const tipText = item.text || '点击快速跳转';
-            wrap.appendChild(createTooltip(tipTitle, tipText));
+            // 踏板圆点悬停预览数据 (第 N 问与提问文本摘要)
+            wrap.__ladderTip = {
+              title: `第 ${i + 1} 轮提问`,
+              text: item.text || '点击快速跳转至此轮'
+            };
 
             wrap.onclick = (e) => {
               e.stopPropagation();
@@ -429,44 +470,46 @@
       function scanAndMountAllPanes() {
         const scs = Array.from(document.querySelectorAll('.overflow-y-auto.isolate, [class*="overflow-y-auto"][class*="isolate"]'));
         const validScs = scs.filter(s => {
-          const r = s.getBoundingClientRect();
-          return r.width > 100 && r.height > 100;
+          const rect = s.getBoundingClientRect();
+          return rect.width > 120 && rect.height > 120;
         });
+
+        if (validScs.length === 0) return;
         validScs.forEach(sc => mountLadderToPane(sc));
       }
 
-      if (!window.__agyLadderWatcher) {
-        window.__agyLadderWatcher = new MutationObserver(() => {
-          if (window.__agyLadderTimer) clearTimeout(window.__agyLadderTimer);
-          window.__agyLadderTimer = setTimeout(scanAndMountAllPanes, 300);
-        });
-        window.__agyLadderWatcher.observe(targetBody, { childList: true, subtree: true });
-      }
-
       scanAndMountAllPanes();
+
+      // MutationObserver 自适应监听
+      let debounceTimer = null;
+      const observer = new MutationObserver(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          scanAndMountAllPanes();
+        }, 300);
+      });
+
+      observer.observe(targetBody, {
+        childList: true,
+        subtree: true
+      });
+
+      // 阶段式定时器保底探测
+      [300, 1000, 2500, 5000].forEach(delay => {
+        setTimeout(scanAndMountAllPanes, delay);
+      });
+
+      console.log('[AgyChatLadder] 独立悬浮预览卡片与天梯引擎已就绪！');
       return true;
     } catch (e) {
-      console.error('[AgyChatLadder Error]', e);
+      console.warn('[AgyChatLadder] 初始化遇到异常:', e);
       return false;
     }
   }
 
-  // 多阶定时器异步兜底挂载 (防冷启动白屏)
-  const bootstrap = () => {
-    if (!initLadderSystem()) {
-      setTimeout(initLadderSystem, 300);
-    }
-  };
-
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootstrap);
+    document.addEventListener('DOMContentLoaded', initLadderSystem);
   } else {
-    bootstrap();
+    initLadderSystem();
   }
-
-  setTimeout(initLadderSystem, 500);
-  setTimeout(initLadderSystem, 1200);
-  setTimeout(initLadderSystem, 2500);
-  setTimeout(initLadderSystem, 5000);
-  console.log('[AgyChatLadder] 叠层图标与智能悬停天梯系统已就绪！');
 })();
