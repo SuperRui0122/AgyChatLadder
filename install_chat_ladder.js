@@ -98,7 +98,8 @@ let preloadContent = fs.readFileSync(preloadPath, 'utf-8');
 const cleanPatterns = [
   /\/\* --- AGY CHAT LADDER TIMELINE ENGINE --- \*\/[\s\S]*?\/\* --- LADDER END --- \*\//g,
   /\/\* --- AGY CHAT LADDER START --- \*\/[\s\S]*?\/\* --- AGY CHAT LADDER END --- \*\//g,
-  /\/\* --- VOYAGER TIMELINE NAVIGATOR --- \*\/[\s\S]*?\/\* --- VOYAGER END --- \*\//g
+  /\/\* --- VOYAGER TIMELINE NAVIGATOR --- \*\/[\s\S]*?\/\* --- VOYAGER END --- \*\//g,
+  /\/\*\*[\s\S]*?Voyager Timeline Navigator[\s\S]*?\(function\s*\(\)\s*\{[\s\S]*?safeInitVoyager[\s\S]*?\}\)\(\);/g
 ];
 cleanPatterns.forEach(pattern => {
   preloadContent = preloadContent.replace(pattern, '');
@@ -125,7 +126,7 @@ if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
 
 console.log('[打包] 正在重新编译并打包 app.asar ...');
 try {
-  execSync(`npx -y @electron/asar pack "${tempDir}" "${tempAsar}"`, { stdio: 'inherit' });
+  execSync(`npx -y @electron/asar pack "${tempDir}" "${tempAsar}" --unpack-dir "**/chrome-devtools-mcp"`, { stdio: 'inherit' });
 } catch (e) {
   console.error('[错误] 打包新 asar 失败: ' + e.message);
   fs.rmSync(tempDir, { recursive: true, force: true });
@@ -141,5 +142,11 @@ try {
   console.log('\n🎉 [成功] AgyChatLadder (对话天梯) 已在当前设备上成功安装！');
   console.log('💡 重新启动 Antigravity 客户端即可享受全新的右侧四级天梯导航！\n');
 } catch (e) {
-  console.error('[错误] 覆盖文件失败 (请先退出正在运行的 Antigravity 客户端): ' + e.message);
+  console.error('\n❌ [错误] 覆盖系统文件失败 (检测到 Antigravity 正在运行中，文件被锁定): ' + e.message);
+  console.error('💡 解决办法：请先彻底关闭 Antigravity 客户端，然后再双击运行本脚本即可！\n');
+  if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
+  const tempUnpacked = tempAsar + '.unpacked';
+  if (fs.existsSync(tempUnpacked)) fs.rmSync(tempUnpacked, { recursive: true, force: true });
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  process.exit(1);
 }
