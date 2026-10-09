@@ -299,14 +299,15 @@
           raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim();
           if (!raw) continue;
 
-          // 累加计算相对于 sc 滚动视口的真实总 offsetTop
-          let curr = it;
+          // 关键修复：定位静态提问卡片容器，彻底摆脱 position: sticky 导致的坐标动态漂移
+          const turnRoot = it.closest('.scroll-mt-4') || it.closest('.flex.items-start') || it.closest('.sticky')?.parentElement || it;
+          let curr = turnRoot;
           let totalTop = 0;
           while (curr && curr !== sc) {
             totalTop += curr.offsetTop;
             curr = curr.offsetParent;
           }
-          const actualTop = totalTop > 0 ? totalTop : it.offsetTop;
+          const actualTop = totalTop > 0 ? totalTop : turnRoot.offsetTop;
 
           // 物理距离严格去重（同一提问节点距离差小于 10px 视为重复）
           if (Math.abs(actualTop - lastOffset) < 10) {
@@ -416,11 +417,15 @@
         // 翻页与平滑滚动防竞争锁
         let isNavigatingLock = false;
         let navLockTimer = null;
-        function lockNavigation(ms = 800) {
+        let activeNavTarget = null;
+        let navAttempts = 0;
+
+        function lockNavigation(ms = 1000) {
           isNavigatingLock = true;
           if (navLockTimer) clearTimeout(navLockTimer);
           navLockTimer = setTimeout(() => {
             isNavigatingLock = false;
+            syncScroll();
           }, ms);
         }
 
@@ -436,11 +441,15 @@
           currentPage = targetPage;
           render();
 
-          lockNavigation(800);
-
           const target = turnsCache[clamped];
           if (target) {
-            sc.scrollTo({ top: Math.max(0, target.offsetTop - 12), behavior: 'smooth' });
+            const targetTop = Math.max(0, target.offsetTop - 12);
+            activeNavTarget = targetTop;
+            navAttempts = 0;
+            const dist = Math.abs(sc.scrollTop - targetTop);
+            const lockMs = Math.max(1000, Math.min(2500, 700 + Math.round(dist * 0.12)));
+            lockNavigation(lockMs);
+            sc.scrollTo({ top: targetTop, behavior: 'smooth' });
           }
         }
 
@@ -471,11 +480,21 @@
             setTimeout(() => {
               const freshTurns = getTurnsData(sc);
               if (freshTurns.length > 0) scrollToTurn(0);
-              else sc.scrollTo({ top: 0, behavior: 'smooth' });
+              else {
+                activeNavTarget = 0;
+                navAttempts = 0;
+                lockNavigation(1500);
+                sc.scrollTo({ top: 0, behavior: 'smooth' });
+              }
             }, 300);
           } else {
             if (turnsCache.length > 0) scrollToTurn(0);
-            else sc.scrollTo({ top: 0, behavior: 'smooth' });
+            else {
+              activeNavTarget = 0;
+              navAttempts = 0;
+              lockNavigation(1500);
+              sc.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }
         };
 
@@ -545,10 +564,18 @@
         lastBtn.innerHTML = ICONS.bottomDouble;
         lastBtn.onclick = (e) => {
           e.stopPropagation();
-          sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
           if (turnsCache.length > 0) {
-            scrollToTurn(turnsCache.length - 1);
+            currentActive = turnsCache.length - 1;
+            currentPage = getPageForTurn(currentActive);
+            render();
           }
+          const targetTop = sc.scrollHeight;
+          activeNavTarget = targetTop;
+          navAttempts = 0;
+          const dist = Math.abs(sc.scrollHeight - sc.scrollTop);
+          const lockMs = Math.max(1000, Math.min(2500, 700 + Math.round(dist * 0.12)));
+          lockNavigation(lockMs);
+          sc.scrollTo({ top: targetTop, behavior: 'smooth' });
         };
 
         rail.append(firstBtn, pagePrevBtn, turnPrevBtn, l1, dotsContainer, l2, turnNextBtn, pageNextBtn, lastBtn);
@@ -570,29 +597,37 @@
           };
 
           // 2. 上一页提示与状态
-          pagePrevBtn.classList.toggle('disabled', isFirstPage);
+          const canPagePrev = currentPage > 0 || currentActive > 0;
+          pagePrevBtn.classList.toggle('disabled', !canPagePrev);
           pagePrevBtn.__ladderTip = {
             title: `上一页 (第 ${currentPage + 1}/${totalPages} 页)`,
-            text: isFirstPage ? `当前已在首页 (第 1~${Math.min(PAGE_SIZE, totalTurns)} 问)` : `向前翻 10 问 (直达第 ${(currentPage - 1) * PAGE_SIZE + 1} 问)`
+            text: currentPage > 0
+              ? `向前翻 10 问 (直达第 ${(currentPage - 1) * PAGE_SIZE + 1} 问)`
+              : (currentActive > 0 ? '直达本页首问' : '当前已在首页首问')
           };
 
           // 3. 上一问提示
+          turnPrevBtn.classList.toggle('disabled', currentActive === 0);
           turnPrevBtn.__ladderTip = {
             title: '上一问 (微调)',
             text: currentActive > 0 ? `返回第 ${currentActive} 问: ${escapeHtml(turnsCache[currentActive - 1]?.text || '')}` : '当前已在首个提问'
           };
 
           // 4. 下一问提示
+          turnNextBtn.classList.toggle('disabled', currentActive >= totalTurns - 1);
           turnNextBtn.__ladderTip = {
             title: '下一问 (微调)',
             text: currentActive < totalTurns - 1 ? `前进至第 ${currentActive + 2} 问: ${escapeHtml(turnsCache[currentActive + 1]?.text || '')}` : '当前已在最新一问'
           };
 
           // 5. 下一页提示与状态
-          pageNextBtn.classList.toggle('disabled', isLastPage);
+          const canPageNext = currentPage < totalPages - 1 || currentActive < totalTurns - 1;
+          pageNextBtn.classList.toggle('disabled', !canPageNext);
           pageNextBtn.__ladderTip = {
             title: `下一页 (第 ${currentPage + 1}/${totalPages} 页)`,
-            text: isLastPage ? `当前已在末页 (共 ${totalTurns} 问)` : `向后翻 10 问 (直达第 ${(currentPage + 1) * PAGE_SIZE + 1} 问)`
+            text: currentPage < totalPages - 1
+              ? `向后翻 10 问 (直达第 ${(currentPage + 1) * PAGE_SIZE + 1} 问)`
+              : (currentActive < totalTurns - 1 ? '直达本页末问' : '当前已在末页最新一问')
           };
 
           // 6. 触底最新提示
@@ -659,16 +694,22 @@
           if (isNavigatingLock) return; // 翻页或跳转动画进行中，严禁滚动事件篡改覆盖页码！
           if (turnsCache.length === 0) return;
           const curTop = sc.scrollTop;
-          let bestIdx = 0;
-          for (let i = 0; i < turnsCache.length; i++) {
-            if (turnsCache[i].offsetTop <= curTop + 120) {
-              bestIdx = i;
+
+          // 触底检测：若已非常接近底部，优先锁定至最新一问
+          if (sc.scrollHeight - (curTop + sc.clientHeight) < 40) {
+            currentActive = turnsCache.length - 1;
+          } else {
+            let bestIdx = 0;
+            for (let i = 0; i < turnsCache.length; i++) {
+              if (turnsCache[i].offsetTop <= curTop + 120) {
+                bestIdx = i;
+              }
             }
+            currentActive = bestIdx;
           }
-          currentActive = bestIdx;
 
           // 若正文滚动跨越了分页界限，天梯自动切页！
-          const expectedPage = getPageForTurn(bestIdx);
+          const expectedPage = getPageForTurn(currentActive);
           if (expectedPage !== currentPage) {
             currentPage = expectedPage;
             render();
@@ -679,6 +720,7 @@
         }
 
         function update() {
+          if (isNavigatingLock) return;
           autoLoadOlderMessages(sc);
           const newTurns = getTurnsData(sc);
           const sameCount = newTurns.length === turnsCache.length;
@@ -715,10 +757,37 @@
           }, 60);
         }, { passive: true });
 
+        sc.addEventListener('scrollend', () => {
+          if (isNavigatingLock && activeNavTarget !== null) {
+            const dist = Math.abs(sc.scrollTop - activeNavTarget);
+            // 若被 Antigravity 的虚拟列表切片插入打断，自动自愈接力继续平滑滚动至目的地！
+            if (dist > 80 && navAttempts < 4) {
+              navAttempts++;
+              const lockMs = Math.max(800, Math.min(2000, 500 + Math.round(dist * 0.12)));
+              lockNavigation(lockMs);
+              sc.scrollTo({ top: activeNavTarget, behavior: 'smooth' });
+              return;
+            }
+          }
+          activeNavTarget = null;
+          navAttempts = 0;
+          if (isNavigatingLock) {
+            if (navLockTimer) clearTimeout(navLockTimer);
+            navLockTimer = setTimeout(() => {
+              isNavigatingLock = false;
+              syncScroll();
+            }, 60);
+          }
+        }, { passive: true });
+
         let scDebounce = null;
         const scObserver = new MutationObserver(() => {
+          if (isNavigatingLock) return;
           if (scDebounce) clearTimeout(scDebounce);
-          scDebounce = setTimeout(update, 300);
+          scDebounce = setTimeout(() => {
+            if (isNavigatingLock) return;
+            update();
+          }, 350);
         });
         scObserver.observe(sc, { childList: true, subtree: true });
 
@@ -748,7 +817,8 @@
 
       scanAndMountAllPanes();
 
-      setInterval(scanAndMountAllPanes, 1500);
+      if (window.__agyLadderInterval) clearInterval(window.__agyLadderInterval);
+      window.__agyLadderInterval = setInterval(scanAndMountAllPanes, 1500);
 
       console.log('[AgyChatLadder] v3.0.0 十点分页视窗与六级天梯对偶终极版已就绪！');
       return true;
