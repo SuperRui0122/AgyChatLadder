@@ -1,14 +1,14 @@
 /**
- * AgyChatLadder (对话天梯) - v1.4.0
- * Antigravity 专属长对话微型时间轴与四级天梯导航引擎（极致防闪烁、单例增量 Diff、独立悬浮预览卡片与多分屏深度感知）
+ * AgyChatLadder (对话天梯) - v2.1.0 (完美防闪烁与精致悬浮预览版)
+ * Antigravity 专属长对话微型时间轴与四级天梯导航引擎（极致零闪烁、独立横向悬浮预览卡片、单例增量 Diff、多分屏深度感知）
  * GitHub: https://github.com/SuperRui0122/AgyChatLadder
  * 
- * - 零闪烁架构: 轨道永久留存，绝不销毁重建；数据采用增量 Diff 比对，无变化零 DOM 操作
+ * - 极致零闪烁: 轨道单例永久存续，绝不销毁重建；增量 Diff 比对，无变化零 DOM 操作
+ * - 独立悬浮预览: 悬停踏板圆点与四级按键在左侧平滑弹出精致横向卡片（无任何竖排挤压 bug，移开即隐）
  * - 作用域收敛: 仅精准监听对话滚动容器，彻底杜绝全局全屏 MutationObserver 造成的死循环与持续闪烁
  * - 图标规范: 登顶首提为上下双重 ^ 叠层, 上一问为单 ^, 下一问为单 v, 触底最新为双重 v 叠层
- * - 独立悬浮预览卡片: 悬停踏板圆点展示第 N 问与提问真实摘要；悬停按键展示功能说明；脱离容器防裁剪
  * - 多分屏感知: 自动识别左右/上下分屏视口，各自独立挂载专属天梯与滚动控制器
- * - 静态常亮翠绿踏板圆点，无晃眼闪烁
+ * - 静态常亮翠绿踏板圆点，无晃眼动画
  */
 (function () {
   'use strict';
@@ -28,16 +28,27 @@
       const targetBody = document.body || document.documentElement;
       if (!targetBody) return false;
 
-      // 1. 全局样式只注入一次，确保绝对纯净
-      let style = document.getElementById('agy-chat-ladder-style');
-      if (!style) {
-        style = document.createElement('style');
-        style.id = 'agy-chat-ladder-style';
-        (document.head || targetBody).appendChild(style);
-      }
+      // 1. 全量清理历史遗留全局旧实例与旧版内嵌提示标签
+      document.querySelectorAll('.agy-chat-ladder-rail').forEach(r => r.remove());
+      document.querySelectorAll('.ladder-tooltip, .ladder-floating-tooltip').forEach(t => t.remove());
+      const oldStyle = document.getElementById('agy-chat-ladder-style');
+      if (oldStyle) oldStyle.remove();
+      const oldLegacyRail = document.getElementById('agy-voyager-rail');
+      if (oldLegacyRail) oldLegacyRail.remove();
+      const oldLegacyStyle = document.getElementById('agy-voyager-style');
+      if (oldLegacyStyle) oldLegacyStyle.remove();
+
+      document.querySelectorAll('*').forEach(el => {
+        if (el.__agyLadder) el.__agyLadder = null;
+      });
+
+      // 2. 注入全局天梯样式
+      let style = document.createElement('style');
+      style.id = 'agy-chat-ladder-style';
+      (document.head || targetBody).appendChild(style);
 
       style.textContent = `
-        /* 强制隐藏任何历史遗留的 .ladder-tooltip */
+        /* 强制隐藏任何历史遗留的内嵌 tooltip，彻底杜绝竖排挤压 bug */
         .ladder-tooltip {
           display: none !important;
           visibility: hidden !important;
@@ -142,7 +153,7 @@
         }
         .ladder-dot-wrap:hover .ladder-dot {
           background: #38bdf8 !important;
-          transform: scale(1.5) !important;
+          transform: scale(1.4) !important;
         }
         .ladder-dot-wrap.active .ladder-dot {
           background: #10b981 !important;
@@ -151,7 +162,7 @@
           animation: none !important;
         }
 
-        /* 独立脱离裁剪的悬浮预览卡片 */
+        /* 独立脱离裁剪的横向悬浮预览卡片 (精致优雅，永不挤压) */
         .ladder-floating-tooltip {
           position: absolute !important;
           right: calc(100% + 14px) !important;
@@ -173,7 +184,7 @@
           transition: opacity 0.15s ease, transform 0.15s ease, top 0.1s ease !important;
           z-index: 99999 !important;
           text-align: left !important;
-          min-width: 130px !important;
+          min-width: 140px !important;
           max-width: 270px !important;
           white-space: normal !important;
           word-break: break-word !important;
@@ -228,7 +239,7 @@
         if (userPrompts.length > 0) {
           return userPrompts.map((it, idx) => {
             let raw = (it.textContent || '').trim().replace(/\s+/g, ' ');
-            raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim(); // 过滤时间戳
+            raw = raw.replace(/\d{1,2}:\d{2}\s*$/, '').trim();
             return {
               el: it,
               offsetTop: it.offsetTop,
@@ -277,7 +288,7 @@
         const rail = document.createElement('div');
         rail.className = 'agy-chat-ladder-rail';
 
-        // 独立悬浮预览卡片
+        // 独立悬浮预览卡片（直接挂在 rail 下，绝对脱离 overflow 裁剪）
         const floatingTip = document.createElement('div');
         floatingTip.className = 'ladder-floating-tooltip';
         rail.appendChild(floatingTip);
@@ -410,6 +421,7 @@
             dot.className = 'ladder-dot';
             wrap.appendChild(dot);
 
+            // 踏板圆点悬停预览数据
             wrap.__ladderTip = {
               title: `第 ${i + 1} 轮提问`,
               text: item.text || '点击快速跳转至此轮'
@@ -435,7 +447,7 @@
           updateActive(bestIdx);
         }
 
-        // 【增量 Diff 核心函数】：内容无变化绝不重绘 DOM
+        // 【增量 Diff 函数】：若提问轮次未增加，绝不重绘 DOM
         function update() {
           const newTurns = getTurnsData(sc);
           const sameCount = newTurns.length === turnsCache.length;
@@ -467,13 +479,11 @@
           }, 60);
         }, { passive: true });
 
-        // 仅对当前会话容器监听变动（而非全局），防死循环
-        let scObserverDebounce = null;
+        // 仅精准监听当前会话容器，绝不监听全屏 body
+        let scDebounce = null;
         const scObserver = new MutationObserver(() => {
-          if (scObserverDebounce) clearTimeout(scObserverDebounce);
-          scObserverDebounce = setTimeout(() => {
-            update();
-          }, 400);
+          if (scDebounce) clearTimeout(scDebounce);
+          scDebounce = setTimeout(update, 400);
         });
         scObserver.observe(sc, { childList: true, subtree: true });
 
@@ -499,10 +509,10 @@
 
       scanAndMountAllPanes();
 
-      // 定期探测新分屏视口（轻量且不滥用 MutationObserver），间隔 1.5 秒
+      // 定期探测新分屏
       setInterval(scanAndMountAllPanes, 1500);
 
-      console.log('[AgyChatLadder] 极致防闪烁零干扰天梯引擎已就绪！');
+      console.log('[AgyChatLadder] 极致防闪烁与精致悬浮预览引擎已就绪！');
       return true;
     } catch (e) {
       console.warn('[AgyChatLadder] 初始化遇到异常:', e);
