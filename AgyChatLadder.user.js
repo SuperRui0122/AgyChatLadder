@@ -31,10 +31,10 @@
       // 1. 清理历史遗留全局旧实例
       const oldFixed = document.getElementById('agy-chat-ladder-rail');
       if (oldFixed) oldFixed.remove();
-      const oldVoyager = document.getElementById('agy-voyager-rail');
-      if (oldVoyager) oldVoyager.remove();
-      const oldVoyagerStyle = document.getElementById('agy-voyager-style');
-      if (oldVoyagerStyle) oldVoyagerStyle.remove();
+      const oldLegacyRail = document.getElementById('agy-voyager-rail');
+      if (oldLegacyRail) oldLegacyRail.remove();
+      const oldLegacyStyle = document.getElementById('agy-voyager-style');
+      if (oldLegacyStyle) oldLegacyStyle.remove();
 
       // 2. 注入全局天梯样式
       let style = document.getElementById('agy-chat-ladder-style');

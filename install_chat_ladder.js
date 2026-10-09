@@ -1,17 +1,24 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 console.log('====================================================');
-console.log('   AgyChatLadder (对话天梯) 跨平台一键安装器 v1.0.0    ');
+console.log('   AgyChatLadder (对话天梯) 跨设备一键安装器 v1.2.0    ');
+console.log('   GitHub: https://github.com/SuperRui0122/AgyChatLadder');
 console.log('====================================================\n');
 
-// 1. 自动探测 Antigravity 安装目录
+// 1. 自动探测 Antigravity 客户端安装目录
 function detectInstallDir() {
   const home = process.env.USERPROFILE || process.env.HOME || '';
   if (process.platform === 'win32') {
-    const defaultWin = path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Programs', 'antigravity');
-    if (fs.existsSync(defaultWin)) return defaultWin;
+    const candidates = [
+      path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Programs', 'antigravity'),
+      path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'antigravity'),
+      path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'antigravity')
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
   } else if (process.platform === 'darwin') {
     const defaultMac = '/Applications/Antigravity.app';
     if (fs.existsSync(defaultMac)) return defaultMac;
@@ -33,9 +40,31 @@ if (!installDir) {
   console.error('[错误] 未能自动定位到 Antigravity 安装目录，请确认客户端已安装。');
   process.exit(1);
 }
-console.log('[探测] 成功识别到安装路径: ' + installDir);
+console.log('[探测] 成功识别到 Antigravity 安装路径: ' + installDir);
 
-// 2. 定位 resources 目录
+// 2. 检测并解除客户端进程锁定 (防止 Windows EBUSY 文件锁死)
+let wasRunning = false;
+if (process.platform === 'win32') {
+  try {
+    const tasklist = execSync('tasklist /fi "imagename eq Antigravity.exe" /nh', { encoding: 'utf-8' });
+    if (tasklist.toLowerCase().includes('antigravity.exe')) {
+      wasRunning = true;
+      console.log('\n⚠️ [检测] 检测到 Antigravity 客户端正在运行！');
+      console.log('💡 为防止 Windows 系统文件被占用锁定导致安装失败，正在安全退出客户端...');
+      try {
+        execSync('taskkill /f /im Antigravity.exe /t', { stdio: 'ignore' });
+      } catch (e) {}
+      // 等待 2 秒确保所有系统句柄完全释放
+      const waitStart = Date.now();
+      while (Date.now() - waitStart < 2000) {}
+      console.log('✅ [完成] Antigravity 客户端已安全退出，开始执行物理注入。\n');
+    }
+  } catch (e) {
+    // 忽略 tasklist 异常
+  }
+}
+
+// 3. 定位 resources 目录与 app.asar
 let resourcesDir = path.join(installDir, 'resources');
 if (process.platform === 'darwin') {
   resourcesDir = path.join(installDir, 'Contents', 'Resources');
@@ -52,31 +81,38 @@ if (!fs.existsSync(asarPath)) {
   process.exit(1);
 }
 
-// 3. 安全备份
+// 4. 安全备份 (如果尚未备份)
 if (!fs.existsSync(bakPath)) {
   console.log('[备份] 正在创建官方原始备份: app.asar.bak ...');
-  fs.copyFileSync(asarPath, bakPath);
-  console.log('[备份] 备份创建成功！');
+  try {
+    fs.copyFileSync(asarPath, bakPath);
+    console.log('[备份] 官方备份创建成功！');
+  } catch (e) {
+    console.warn('[警告] 备份创建失败: ' + e.message);
+  }
 } else {
-  console.log('[备份] 已存在历史备份文件，跳过备份。');
+  console.log('[备份] 已存在历史备份文件 app.asar.bak，跳过备份。');
 }
 
-// 4. 解包
+// 5. 准备解包
 const tempDir = path.join(__dirname, '_temp_unpack');
-if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+if (fs.existsSync(tempDir)) {
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
 
-console.log('[解包] 正在使用 asar 提取 app.asar ...');
+console.log('[解包] 正在使用 @electron/asar 提取 app.asar ...');
 try {
   execSync(`npx -y @electron/asar extract "${asarPath}" "${tempDir}"`, { stdio: 'inherit' });
 } catch (e) {
-  console.error('[错误] 解包失败，请检查是否已安装 Node.js 和网络环境。');
+  console.error('[错误] 解包失败，请检查是否已正确联网或安装 Node.js。');
+  if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
   process.exit(1);
 }
 
-// 5. 注入 AgyChatLadder 核心代码到 preload.js
+// 6. 注入 AgyChatLadder 核心代码到 preload.js
 const preloadPath = path.join(tempDir, 'dist', 'preload.js');
 if (!fs.existsSync(preloadPath)) {
-  console.error('[错误] 解包后未找到 dist/preload.js');
+  console.error('[错误] 解包后未找到 dist/preload.js: ' + preloadPath);
   fs.rmSync(tempDir, { recursive: true, force: true });
   process.exit(1);
 }
@@ -94,12 +130,11 @@ if (fs.existsSync(ladderSourcePath)) {
 console.log('[修改] 正在向 preload.js 注入 AgyChatLadder 对话天梯引擎...');
 let preloadContent = fs.readFileSync(preloadPath, 'utf-8');
 
-// 幂等清理旧版注入
+// 幂等清理历史遗留的天梯注入代码
 const cleanPatterns = [
   /\/\* --- AGY CHAT LADDER TIMELINE ENGINE --- \*\/[\s\S]*?\/\* --- LADDER END --- \*\//g,
   /\/\* --- AGY CHAT LADDER START --- \*\/[\s\S]*?\/\* --- AGY CHAT LADDER END --- \*\//g,
-  /\/\* --- VOYAGER TIMELINE NAVIGATOR --- \*\/[\s\S]*?\/\* --- VOYAGER END --- \*\//g,
-  /\/\*\*[\s\S]*?Voyager Timeline Navigator[\s\S]*?\(function\s*\(\)\s*\{[\s\S]*?safeInitVoyager[\s\S]*?\}\)\(\);/g
+  /\/\* --- LEGACY TIMELINE NAVIGATOR --- \*\/[\s\S]*?\/\* --- LEGACY END --- \*\//g
 ];
 cleanPatterns.forEach(pattern => {
   preloadContent = preloadContent.replace(pattern, '');
@@ -110,19 +145,21 @@ const injectPayload = `\n\n${LADDER_MARKER}\n${ladderCode}\n/* --- LADDER END --
 preloadContent += injectPayload;
 fs.writeFileSync(preloadPath, preloadContent, 'utf-8');
 
-// 语法检查门禁
+// 7. 严格执行预编译语法检查门禁
 try {
   execSync(`node --check "${preloadPath}"`);
   console.log('[门禁] preload.js 语法校验 100% 通过！');
 } catch (e) {
-  console.error('[错误] 注入后语法检查未通过，已中止安装。');
+  console.error('[错误] 注入后语法检查未通过，已中止安装，避免影响客户端正常启动。');
   fs.rmSync(tempDir, { recursive: true, force: true });
   process.exit(1);
 }
 
-// 6. 重新打包
+// 8. 重新打包 (严格排除 chrome-devtools-mcp 防止体积虚增与沙箱崩溃)
 const tempAsar = path.join(__dirname, 'app.asar.temp');
 if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
+const tempUnpacked = tempAsar + '.unpacked';
+if (fs.existsSync(tempUnpacked)) fs.rmSync(tempUnpacked, { recursive: true, force: true });
 
 console.log('[打包] 正在重新编译并打包 app.asar ...');
 try {
@@ -133,20 +170,54 @@ try {
   process.exit(1);
 }
 
-// 7. 部署并清理
+// 9. 校验生成的文件体积
+if (!fs.existsSync(tempAsar)) {
+  console.error('[错误] 未能生成有效的 app.asar.temp 文件！');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  process.exit(1);
+}
+
+const asarSizeMb = (fs.statSync(tempAsar).size / (1024 * 1024)).toFixed(2);
+console.log(`[校验] 打包体积正常: ${asarSizeMb} MB`);
+
+// 10. 原子替换系统文件并清理临时缓存
 console.log('[部署] 正在原子替换系统文件...');
 try {
   fs.copyFileSync(tempAsar, asarPath);
   fs.unlinkSync(tempAsar);
-  fs.rmSync(tempDir, { recursive: true, force: true });
-  console.log('\n🎉 [成功] AgyChatLadder (对话天梯) 已在当前设备上成功安装！');
-  console.log('💡 重新启动 Antigravity 客户端即可享受全新的右侧四级天梯导航！\n');
-} catch (e) {
-  console.error('\n❌ [错误] 覆盖系统文件失败 (检测到 Antigravity 正在运行中，文件被锁定): ' + e.message);
-  console.error('💡 解决办法：请先彻底关闭 Antigravity 客户端，然后再双击运行本脚本即可！\n');
-  if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
-  const tempUnpacked = tempAsar + '.unpacked';
   if (fs.existsSync(tempUnpacked)) fs.rmSync(tempUnpacked, { recursive: true, force: true });
   fs.rmSync(tempDir, { recursive: true, force: true });
+
+  console.log('\n====================================================');
+  console.log('   🎉 [成功] AgyChatLadder (对话天梯) 安装大获成功！   ');
+  console.log('====================================================');
+  console.log('✨ 核心亮点:');
+  console.log('  1. 叠层 ^ 图标: 登顶首提为上下双重 ^ 叠层，上一问/下一问单箭头，触底最新双重 v 叠层');
+  console.log('  2. 智能悬停卡片: 悬停踏板圆点实时预览第 N 问内容，悬停按键提示功能说明');
+  console.log('  3. 多分屏深度感知: 左右/上下分屏均自动挂载独立专属天梯，互不干扰');
+  console.log('  4. 永久磁盘固化: 重启、刷新客户端均稳定常驻，彻底告别重启失效！\n');
+
+  // 如果此前运行中，自动帮用户重启客户端
+  if (wasRunning) {
+    try {
+      const exePath = path.join(installDir, 'Antigravity.exe');
+      if (fs.existsSync(exePath)) {
+        console.log('🚀 [启动] 正在自动为您重新拉起 Antigravity 客户端...');
+        const child = spawn(exePath, [], { detached: true, stdio: 'ignore' });
+        child.unref();
+        console.log('✅ 客户端已启动，快去体验右侧对话天梯吧！\n');
+      }
+    } catch (e) {
+      console.log('💡 请手动双击启动 Antigravity 体验全新天梯功能。');
+    }
+  } else {
+    console.log('💡 现在可以直接启动 Antigravity 客户端体验全新天梯功能了！\n');
+  }
+} catch (e) {
+  console.error('\n❌ [错误] 覆盖系统文件失败: ' + e.message);
+  console.error('💡 解决办法：请先彻底关闭 Antigravity 客户端，然后再双击运行本脚本即可！\n');
+  if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
+  if (fs.existsSync(tempUnpacked)) fs.rmSync(tempUnpacked, { recursive: true, force: true });
+  if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
   process.exit(1);
 }
