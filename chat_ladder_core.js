@@ -413,6 +413,17 @@
           });
         }
 
+        // 翻页与平滑滚动防竞争锁
+        let isNavigatingLock = false;
+        let navLockTimer = null;
+        function lockNavigation(ms = 800) {
+          isNavigatingLock = true;
+          if (navLockTimer) clearTimeout(navLockTimer);
+          navLockTimer = setTimeout(() => {
+            isNavigatingLock = false;
+          }, ms);
+        }
+
         function scrollToTurn(globalIdx) {
           if (turnsCache.length === 0) turnsCache = getTurnsData(sc);
           if (turnsCache.length === 0) return;
@@ -422,12 +433,10 @@
 
           // 自动感知页码跨越
           const targetPage = getPageForTurn(clamped);
-          if (targetPage !== currentPage) {
-            currentPage = targetPage;
-            render();
-          } else {
-            updateActiveDots();
-          }
+          currentPage = targetPage;
+          render();
+
+          lockNavigation(800);
 
           const target = turnsCache[clamped];
           if (target) {
@@ -479,7 +488,12 @@
           if (currentPage > 0) {
             scrollToPage(currentPage - 1);
           } else {
-            scrollToTurn(0);
+            if (currentActive > 0) {
+              scrollToTurn(0);
+            } else {
+              showTip(pagePrevBtn, '上一页 (已至首页)', `当前已在第 1 页 (第 1~${Math.min(PAGE_SIZE, turnsCache.length)} 问)`);
+              setTimeout(hideTip, 1600);
+            }
           }
         };
 
@@ -515,7 +529,13 @@
           if (currentPage < totalPages - 1) {
             scrollToPage(currentPage + 1);
           } else {
-            scrollToTurn(turnsCache.length - 1);
+            const lastIdx = turnsCache.length - 1;
+            if (currentActive < lastIdx) {
+              scrollToTurn(lastIdx);
+            } else {
+              showTip(pageNextBtn, '下一页 (已至末页)', `当前共 ${turnsCache.length} 问（已在最后一页）`);
+              setTimeout(hideTip, 1600);
+            }
           }
         };
 
@@ -550,10 +570,10 @@
           };
 
           // 2. 上一页提示与状态
-          pagePrevBtn.classList.toggle('disabled', isFirstPage && totalPages <= 1);
+          pagePrevBtn.classList.toggle('disabled', isFirstPage);
           pagePrevBtn.__ladderTip = {
             title: `上一页 (第 ${currentPage + 1}/${totalPages} 页)`,
-            text: isFirstPage ? '当前已在第 1 页 (第 1-10 问)' : `跨跃翻至第 ${currentPage} 页 (第 ${(currentPage - 1) * PAGE_SIZE + 1} 问)`
+            text: isFirstPage ? `当前已在首页 (第 1~${Math.min(PAGE_SIZE, totalTurns)} 问)` : `向前翻 10 问 (直达第 ${(currentPage - 1) * PAGE_SIZE + 1} 问)`
           };
 
           // 3. 上一问提示
@@ -569,10 +589,10 @@
           };
 
           // 5. 下一页提示与状态
-          pageNextBtn.classList.toggle('disabled', isLastPage && totalPages <= 1);
+          pageNextBtn.classList.toggle('disabled', isLastPage);
           pageNextBtn.__ladderTip = {
             title: `下一页 (第 ${currentPage + 1}/${totalPages} 页)`,
-            text: isLastPage ? '当前已在最后一页' : `跨跃翻至第 ${currentPage + 2} 页 (第 ${(currentPage + 1) * PAGE_SIZE + 1} 问)`
+            text: isLastPage ? `当前已在末页 (共 ${totalTurns} 问)` : `向后翻 10 问 (直达第 ${(currentPage + 1) * PAGE_SIZE + 1} 问)`
           };
 
           // 6. 触底最新提示
@@ -636,6 +656,7 @@
 
         // 正文滚动时：双向视口感知与自动切页吸附
         function syncScroll() {
+          if (isNavigatingLock) return; // 翻页或跳转动画进行中，严禁滚动事件篡改覆盖页码！
           if (turnsCache.length === 0) return;
           const curTop = sc.scrollTop;
           let bestIdx = 0;
