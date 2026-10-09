@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AgyChatLadder (对话天梯)
 // @namespace    https://github.com/SuperRui0122/AgyChatLadder
-// @version      1.3.0
-// @description  Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、独立悬浮预览卡片与多分屏深度感知）
+// @version      2.0.0
+// @description  Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持十点分页视窗、六键经典对偶、上下叠层图标与多分屏深度感知）
 // @author       SuperRui0122
 // @match        *://*/*
 // @grant        none
@@ -10,16 +10,24 @@
 // ==/UserScript==
 
 /**
- * AgyChatLadder (对话天梯) - v2.2.0 (精准去重与像素级跳转终极版)
+ * AgyChatLadder (对话天梯) - v3.0.0 (十点分页视窗与六级天梯对偶终极版)
  * Antigravity 专属长对话微型时间轴与四级天梯导航引擎
  * GitHub: https://github.com/SuperRui0122/AgyChatLadder
  * 
- * - 纯净单点映射: 严格一问一点，彻底根除多重节点抓取引起的连续重复点与假跳转 bug
- * - 累积偏移计算: 逐级累加至滚动视口，解决嵌套 offsetTop 偏差，确保每次跳转置顶居中
- * - 极致零闪烁: 轨道单例永久存续，增量 Diff 比对，无变化零 DOM 操作
- * - 独立悬浮预览: 悬停踏板圆点与四级按键在左侧平滑弹出精致横向卡片，移开即隐
- * - 多分屏感知: 自动识别左右/上下分屏视口，各自独立挂载专属天梯与滚动控制器
- * - 静态常亮翠绿踏板圆点，无晃眼动画
+ * - 方案 C 经典六键对偶:
+ *   [ ⌃⌃ ] 登顶首提 (严格上下叠层双尖角)
+ *   [  ^  ] 上一页 (大步跨 10 问，Page Up 联动跳转)
+ *   [  <  ] 上一问 (向上微调 1 问)
+ *   ─────── 视窗分隔线 ───────
+ *   [ 最多 10 个圆点踏板 ] (不足 10 问时自适应，不留多余空位)
+ *   ─────── 视窗分隔线 ───────
+ *   [  >  ] 下一问 (向下微调 1 问)
+ *   [  v  ] 下一页 (大步跨 10 问，Page Down 联动跳转)
+ *   [ vv  ] 触底最新 (严格上下叠层双尖角)
+ * - 双向视口智能吸附: 自由滚动正文时自动感知所处轮次并无感切换所属页码块
+ * - 全景历史自动穿透: 自动探测并穿透 Antigravity sr-only 截断分页，无遗漏补齐踏板
+ * - 纯净权威单点映射: 严格一问一点，物理距离去重，像素级置顶对齐
+ * - 轻量微型页码卡片: 悬停清晰反馈当前页码与跨度信息
  */
 (function () {
   'use strict';
@@ -39,7 +47,7 @@
       const targetBody = document.body || document.documentElement;
       if (!targetBody) return false;
 
-      // 1. 全量清理历史遗留全局旧实例与旧版内嵌提示标签
+      // 1. 全量清理历史遗留旧实例与旧版内嵌提示标签
       document.querySelectorAll('.agy-chat-ladder-rail').forEach(r => r.remove());
       document.querySelectorAll('.ladder-tooltip, .ladder-floating-tooltip').forEach(t => t.remove());
       const oldStyle = document.getElementById('agy-chat-ladder-style');
@@ -73,18 +81,18 @@
           display: flex !important;
           flex-direction: column !important;
           align-items: center !important;
-          gap: 5px !important;
+          gap: 4px !important;
           z-index: 50 !important;
-          background: rgba(22, 24, 29, 0.88) !important;
+          background: rgba(22, 24, 29, 0.90) !important;
           backdrop-filter: blur(14px) !important;
           -webkit-backdrop-filter: blur(14px) !important;
-          padding: 7px 4px !important;
+          padding: 6px 4px !important;
           border-radius: 20px !important;
           border: 1px solid rgba(255, 255, 255, 0.16) !important;
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
-          opacity: 0.82 !important;
+          opacity: 0.85 !important;
           transition: opacity 0.2s ease, transform 0.2s ease !important;
-          max-height: 80% !important;
+          max-height: 85% !important;
           user-select: none !important;
           pointer-events: auto !important;
         }
@@ -102,12 +110,17 @@
           color: rgba(255, 255, 255, 0.75);
           border-radius: 5px;
           position: relative;
-          transition: background 0.15s, color 0.15s, transform 0.15s;
+          transition: background 0.15s, color 0.15s, transform 0.15s, opacity 0.15s;
         }
-        .ladder-btn:hover {
+        .ladder-btn:hover:not(.disabled) {
           color: #fff;
           background: rgba(255, 255, 255, 0.2);
-          transform: scale(1.15);
+          transform: scale(1.14);
+        }
+        .ladder-btn.disabled {
+          opacity: 0.25 !important;
+          cursor: not-allowed !important;
+          transform: none !important;
         }
 
         .ladder-icon-svg {
@@ -125,22 +138,17 @@
         .ladder-line {
           width: 12px;
           height: 1px;
-          background: rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.14);
           margin: 2px 0;
+          cursor: default;
         }
 
         .ladder-dots {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 8px;
-          max-height: calc(80vh - 130px);
-          overflow-y: auto;
-          padding: 4px 2px;
-          scrollbar-width: none;
-        }
-        .ladder-dots::-webkit-scrollbar {
-          display: none;
+          gap: 7px;
+          padding: 3px 2px;
         }
 
         .ladder-dot-wrap {
@@ -235,20 +243,63 @@
         }
       `;
 
-      // SVG 图标库
+      // SVG 图标库 (严谨矢量设计)
       const ICONS = {
+        // 登顶首提: 严格上下纵向叠层的双尖角
         topDouble: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="18 11 12 5 6 11"></polyline><polyline points="18 18 12 12 6 18"></polyline></svg>`,
-        upSingle: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
-        downSingle: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
+        // 上一页: 向上单尖角
+        pageUp: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
+        // 上一问: 向左尖角 (小步回退)
+        turnPrev: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
+        // 下一问: 向右尖角 (小步前进)
+        turnNext: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+        // 下一页: 向下单尖角
+        pageDown: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
+        // 触底最新: 严格上下纵向叠层的双尖角
         bottomDouble: `<svg class="ladder-icon-svg" viewBox="0 0 24 24"><polyline points="6 6 12 12 18 6"></polyline><polyline points="6 13 12 19 18 13"></polyline></svg>`
       };
+
+      // 智能检测并无感自动展开更早历史（穿透 Antigravity 的 sr-only 截断分页）
+      function autoLoadOlderMessages(sc) {
+        if (!sc) return false;
+        const loadBtn = sc.querySelector('button[aria-label*="Load older messages"], button.sr-only');
+        if (!loadBtn || loadBtn.disabled || loadBtn.getAttribute('aria-disabled') === 'true') return false;
+
+        const label = loadBtn.getAttribute('aria-label') || loadBtn.textContent || '';
+        if (label.includes('No more older messages')) return false;
+        if (!label.toLowerCase().includes('load older messages')) return false;
+
+        // 冷却锁与防护上限
+        if (sc.__ladderLoadingOlder) return false;
+        sc.__ladderLoadCount = (sc.__ladderLoadCount || 0) + 1;
+        if (sc.__ladderLoadCount > 35) return false;
+
+        sc.__ladderLoadingOlder = true;
+        try {
+          loadBtn.click();
+        } catch (_) {}
+
+        setTimeout(() => {
+          sc.__ladderLoadingOlder = false;
+          if (sc.parentElement && sc.parentElement.__agyLadder) {
+            sc.parentElement.__agyLadder.update();
+          }
+        }, 350);
+        return true;
+      }
 
       // 精准提取单点映射提问，彻底杜绝多重抓取与重复点
       function getTurnsData(sc) {
         if (!sc) return [];
+
+        autoLoadOlderMessages(sc);
+
         let nodes = Array.from(sc.querySelectorAll('.md-sticky-message-bleed'));
-        if (nodes.length === 0) {
-          nodes = Array.from(sc.querySelectorAll('.group\\/user-input-step'));
+        const userSteps = Array.from(sc.querySelectorAll('.group\\/user-input-step'));
+
+        // 若 bleeds 数量少于 userSteps，以卡片根节点为准容错补齐
+        if (nodes.length < userSteps.length) {
+          nodes = userSteps;
         }
 
         const turns = [];
@@ -292,6 +343,9 @@
           parent.style.position = 'relative';
         }
 
+        sc.__ladderLoadCount = 0;
+        sc.__ladderLoadingOlder = false;
+
         let existingRail = parent.querySelector('.agy-chat-ladder-rail');
         if (existingRail && parent.__agyLadder) {
           parent.__agyLadder.update();
@@ -329,12 +383,17 @@
         rail.addEventListener('mouseover', (e) => {
           const btn = e.target.closest('.ladder-btn');
           const dot = e.target.closest('.ladder-dot-wrap');
+          const line = e.target.closest('.ladder-line');
           if (btn && btn.__ladderTip) {
             showTip(btn, btn.__ladderTip.title, btn.__ladderTip.text);
             return;
           }
           if (dot && dot.__ladderTip) {
             showTip(dot, dot.__ladderTip.title, dot.__ladderTip.text);
+            return;
+          }
+          if (line && line.__ladderTip) {
+            showTip(line, line.__ladderTip.title, line.__ladderTip.text);
             return;
           }
           hideTip();
@@ -344,45 +403,102 @@
           hideTip();
         });
 
-        let currentActive = 0;
+        // 核心状态管理 (固定每页 10 问)
+        const PAGE_SIZE = 10;
+        let currentActive = 0; // 全局提问索引 (0 ~ N-1)
+        let currentPage = 0;   // 当前展示页码 (0 ~ totalPages-1)
         let turnsCache = [];
 
-        function updateActive(idx) {
-          currentActive = idx;
-          dotsContainer.querySelectorAll('.ladder-dot-wrap').forEach((w, i) => {
-            w.classList.toggle('active', i === idx);
+        function getTotalPages() {
+          return Math.max(1, Math.ceil(turnsCache.length / PAGE_SIZE));
+        }
+
+        function getPageForTurn(turnIdx) {
+          return Math.floor(Math.max(0, turnIdx) / PAGE_SIZE);
+        }
+
+        function updateActiveDots() {
+          dotsContainer.querySelectorAll('.ladder-dot-wrap').forEach((w) => {
+            const gIdx = w.__globalIndex;
+            w.classList.toggle('active', gIdx === currentActive);
           });
         }
 
-        function scrollToTurn(idx) {
+        function scrollToTurn(globalIdx) {
           if (turnsCache.length === 0) turnsCache = getTurnsData(sc);
           if (turnsCache.length === 0) return;
-          const clamped = Math.max(0, Math.min(turnsCache.length - 1, idx));
+
+          const clamped = Math.max(0, Math.min(turnsCache.length - 1, globalIdx));
           currentActive = clamped;
+
+          // 自动感知页码跨越
+          const targetPage = getPageForTurn(clamped);
+          if (targetPage !== currentPage) {
+            currentPage = targetPage;
+            render();
+          } else {
+            updateActiveDots();
+          }
+
           const target = turnsCache[clamped];
           if (target) {
             sc.scrollTo({ top: Math.max(0, target.offsetTop - 12), behavior: 'smooth' });
           }
-          updateActive(clamped);
         }
 
-        // 1. 登顶首提
+        function scrollToPage(pageIdx) {
+          const totalPages = getTotalPages();
+          const clampedPage = Math.max(0, Math.min(totalPages - 1, pageIdx));
+          currentPage = clampedPage;
+          // 方式 A：翻页即联动跳跃，直接置顶该页首问
+          const targetTurn = clampedPage * PAGE_SIZE;
+          scrollToTurn(targetTurn);
+        }
+
+        // ================= 方案 C 经典六键结构构建 =================
+
+        // 1. 登顶首提 (⌃⌃ 上下叠层)
         const firstBtn = document.createElement('div');
         firstBtn.className = 'ladder-btn';
         firstBtn.innerHTML = ICONS.topDouble;
-        firstBtn.__ladderTip = { title: '登顶首提', text: '瞬时直达会话首个提问' };
         firstBtn.onclick = (e) => {
           e.stopPropagation();
-          if (turnsCache.length > 0) scrollToTurn(0);
-          else sc.scrollTo({ top: 0, behavior: 'smooth' });
+          const loadBtn = sc.querySelector('button[aria-label*="Load older messages"], button.sr-only');
+          const hasMore = loadBtn && !loadBtn.disabled &&
+                          loadBtn.getAttribute('aria-disabled') !== 'true' &&
+                          !(loadBtn.getAttribute('aria-label') || '').includes('No more older messages');
+
+          if (hasMore) {
+            try { loadBtn.click(); } catch (_) {}
+            setTimeout(() => {
+              const freshTurns = getTurnsData(sc);
+              if (freshTurns.length > 0) scrollToTurn(0);
+              else sc.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 300);
+          } else {
+            if (turnsCache.length > 0) scrollToTurn(0);
+            else sc.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         };
 
-        // 2. 上一问
-        const prevBtn = document.createElement('div');
-        prevBtn.className = 'ladder-btn';
-        prevBtn.innerHTML = ICONS.upSingle;
-        prevBtn.__ladderTip = { title: '上一问', text: '返回上一个提问轮次' };
-        prevBtn.onclick = (e) => {
+        // 2. 上一页 (^ 向上尖角，Page Up 跳 10 问)
+        const pagePrevBtn = document.createElement('div');
+        pagePrevBtn.className = 'ladder-btn';
+        pagePrevBtn.innerHTML = ICONS.pageUp;
+        pagePrevBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (currentPage > 0) {
+            scrollToPage(currentPage - 1);
+          } else {
+            scrollToTurn(0);
+          }
+        };
+
+        // 3. 上一问 (< 向左尖角，微调 1 问)
+        const turnPrevBtn = document.createElement('div');
+        turnPrevBtn.className = 'ladder-btn';
+        turnPrevBtn.innerHTML = ICONS.turnPrev;
+        turnPrevBtn.onclick = (e) => {
           e.stopPropagation();
           scrollToTurn(currentActive - 1);
         };
@@ -391,32 +507,104 @@
         const dotsContainer = document.createElement('div'); dotsContainer.className = 'ladder-dots';
         const l2 = document.createElement('div'); l2.className = 'ladder-line';
 
-        // 3. 下一问
-        const nextBtn = document.createElement('div');
-        nextBtn.className = 'ladder-btn';
-        nextBtn.innerHTML = ICONS.downSingle;
-        nextBtn.__ladderTip = { title: '下一问', text: '顺流前往下一个提问' };
-        nextBtn.onclick = (e) => {
+        // 4. 下一问 (> 向右尖角，微调 1 问)
+        const turnNextBtn = document.createElement('div');
+        turnNextBtn.className = 'ladder-btn';
+        turnNextBtn.innerHTML = ICONS.turnNext;
+        turnNextBtn.onclick = (e) => {
           e.stopPropagation();
           scrollToTurn(currentActive + 1);
         };
 
-        // 4. 触底最新
+        // 5. 下一页 (v 向下尖角，Page Down 跳 10 问)
+        const pageNextBtn = document.createElement('div');
+        pageNextBtn.className = 'ladder-btn';
+        pageNextBtn.innerHTML = ICONS.pageDown;
+        pageNextBtn.onclick = (e) => {
+          e.stopPropagation();
+          const totalPages = getTotalPages();
+          if (currentPage < totalPages - 1) {
+            scrollToPage(currentPage + 1);
+          } else {
+            scrollToTurn(turnsCache.length - 1);
+          }
+        };
+
+        // 6. 触底最新 (vv 上下叠层)
         const lastBtn = document.createElement('div');
         lastBtn.className = 'ladder-btn';
         lastBtn.innerHTML = ICONS.bottomDouble;
-        lastBtn.__ladderTip = { title: '触底最新', text: '瞬时直达最新生成的回复' };
         lastBtn.onclick = (e) => {
           e.stopPropagation();
           sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
-          if (turnsCache.length > 0) updateActive(turnsCache.length - 1);
+          if (turnsCache.length > 0) {
+            scrollToTurn(turnsCache.length - 1);
+          }
         };
 
-        rail.append(firstBtn, prevBtn, l1, dotsContainer, l2, nextBtn, lastBtn);
+        rail.append(firstBtn, pagePrevBtn, turnPrevBtn, l1, dotsContainer, l2, turnNextBtn, pageNextBtn, lastBtn);
         parent.appendChild(rail);
 
+        // 刷新按键状态与轻量悬停提示
+        function updateControlsTips() {
+          const totalTurns = turnsCache.length;
+          const totalPages = getTotalPages();
+          const isFirstPage = currentPage === 0;
+          const isLastPage = currentPage >= totalPages - 1;
+
+          // 1. 登顶首提提示
+          const loadBtn = sc.querySelector('button[aria-label*="Load older messages"], button.sr-only');
+          const hasUnloaded = loadBtn && !(loadBtn.getAttribute('aria-label') || '').includes('No more older messages');
+          firstBtn.__ladderTip = {
+            title: '登顶首提 (首问)',
+            text: hasUnloaded ? '直达第 1 问（自动展开更早历史）' : '直达会话第 1 轮提问'
+          };
+
+          // 2. 上一页提示与状态
+          pagePrevBtn.classList.toggle('disabled', isFirstPage && totalPages <= 1);
+          pagePrevBtn.__ladderTip = {
+            title: `上一页 (第 ${currentPage + 1}/${totalPages} 页)`,
+            text: isFirstPage ? '当前已在第 1 页 (第 1-10 问)' : `跨跃翻至第 ${currentPage} 页 (第 ${(currentPage - 1) * PAGE_SIZE + 1} 问)`
+          };
+
+          // 3. 上一问提示
+          turnPrevBtn.__ladderTip = {
+            title: '上一问 (微调)',
+            text: currentActive > 0 ? `返回第 ${currentActive} 问: ${escapeHtml(turnsCache[currentActive - 1]?.text || '')}` : '当前已在首个提问'
+          };
+
+          // 4. 下一问提示
+          turnNextBtn.__ladderTip = {
+            title: '下一问 (微调)',
+            text: currentActive < totalTurns - 1 ? `前进至第 ${currentActive + 2} 问: ${escapeHtml(turnsCache[currentActive + 1]?.text || '')}` : '当前已在最新一问'
+          };
+
+          // 5. 下一页提示与状态
+          pageNextBtn.classList.toggle('disabled', isLastPage && totalPages <= 1);
+          pageNextBtn.__ladderTip = {
+            title: `下一页 (第 ${currentPage + 1}/${totalPages} 页)`,
+            text: isLastPage ? '当前已在最后一页' : `跨跃翻至第 ${currentPage + 2} 页 (第 ${(currentPage + 1) * PAGE_SIZE + 1} 问)`
+          };
+
+          // 6. 触底最新提示
+          lastBtn.__ladderTip = {
+            title: '触底最新',
+            text: '瞬时直达最新生成的回复'
+          };
+
+          // 分割线页码信息提示
+          const lineTip = {
+            title: `第 ${currentPage + 1} / ${totalPages} 页`,
+            text: `当前视窗展示第 ${currentPage * PAGE_SIZE + 1} ~ ${Math.min(totalTurns, (currentPage + 1) * PAGE_SIZE)} 问 (共 ${totalTurns} 问)`
+          };
+          l1.__ladderTip = lineTip;
+          l2.__ladderTip = lineTip;
+        }
+
+        // 渲染当前页圆点 (最多 10 个，自适应)
         function render() {
           dotsContainer.innerHTML = '';
+          updateControlsTips();
 
           if (turnsCache.length === 0) {
             const wrap = document.createElement('div');
@@ -429,26 +617,35 @@
             return;
           }
 
-          turnsCache.forEach((item, i) => {
+          // 切片当前页的 10 个圆点
+          const startIdx = currentPage * PAGE_SIZE;
+          const endIdx = Math.min(turnsCache.length, startIdx + PAGE_SIZE);
+          const currentSlice = turnsCache.slice(startIdx, endIdx);
+
+          currentSlice.forEach((item, localIdx) => {
+            const globalIdx = startIdx + localIdx;
             const wrap = document.createElement('div');
-            wrap.className = 'ladder-dot-wrap' + (i === currentActive ? ' active' : '');
+            wrap.className = 'ladder-dot-wrap' + (globalIdx === currentActive ? ' active' : '');
+            wrap.__globalIndex = globalIdx;
+
             const dot = document.createElement('div');
             dot.className = 'ladder-dot';
             wrap.appendChild(dot);
 
             wrap.__ladderTip = {
-              title: `第 ${i + 1} 轮提问`,
+              title: `第 ${globalIdx + 1} 轮提问`,
               text: item.text || '点击快速跳转至此轮'
             };
 
             wrap.onclick = (e) => {
               e.stopPropagation();
-              scrollToTurn(i);
+              scrollToTurn(globalIdx);
             };
             dotsContainer.appendChild(wrap);
           });
         }
 
+        // 正文滚动时：双向视口感知与自动切页吸附
         function syncScroll() {
           if (turnsCache.length === 0) return;
           const curTop = sc.scrollTop;
@@ -458,10 +655,21 @@
               bestIdx = i;
             }
           }
-          updateActive(bestIdx);
+          currentActive = bestIdx;
+
+          // 若正文滚动跨越了分页界限，天梯自动切页！
+          const expectedPage = getPageForTurn(bestIdx);
+          if (expectedPage !== currentPage) {
+            currentPage = expectedPage;
+            render();
+          } else {
+            updateActiveDots();
+            updateControlsTips();
+          }
         }
 
         function update() {
+          autoLoadOlderMessages(sc);
           const newTurns = getTurnsData(sc);
           const sameCount = newTurns.length === turnsCache.length;
           let sameContent = sameCount;
@@ -479,6 +687,10 @@
           }
 
           turnsCache = newTurns;
+          const totalPages = getTotalPages();
+          if (currentPage >= totalPages) {
+            currentPage = Math.max(0, totalPages - 1);
+          }
           render();
           syncScroll();
         }
@@ -495,11 +707,12 @@
         let scDebounce = null;
         const scObserver = new MutationObserver(() => {
           if (scDebounce) clearTimeout(scDebounce);
-          scDebounce = setTimeout(update, 400);
+          scDebounce = setTimeout(update, 300);
         });
         scObserver.observe(sc, { childList: true, subtree: true });
 
         turnsCache = getTurnsData(sc);
+        currentPage = getPageForTurn(currentActive);
         render();
         syncScroll();
 
@@ -516,14 +729,17 @@
         });
 
         if (validScs.length === 0) return;
-        validScs.forEach(sc => mountLadderToPane(sc));
+        validScs.forEach(sc => {
+          autoLoadOlderMessages(sc);
+          mountLadderToPane(sc);
+        });
       }
 
       scanAndMountAllPanes();
 
       setInterval(scanAndMountAllPanes, 1500);
 
-      console.log('[AgyChatLadder] 精准去重与像素级跳转终极版已就绪！');
+      console.log('[AgyChatLadder] v3.0.0 十点分页视窗与六级天梯对偶终极版已就绪！');
       return true;
     } catch (e) {
       console.warn('[AgyChatLadder] 初始化遇到异常:', e);

@@ -1,7 +1,7 @@
 {
   "name": "agy-chat-ladder",
-  "version": "1.0.0",
-  "description": "Antigravity 专属长对话微型时间轴与四级天梯导航引擎 (Four-tier conversation timeline & navigation engine for Google Antigravity)",
+  "version": "2.0.0",
+  "description": "Antigravity 专属长对话微型时间轴与六级天梯对偶导航引擎 (Six-tier dual conversation timeline & ten-dot pagination navigation engine for Google Antigravity)",
   "main": "chat_ladder_core.js",
   "scripts": {
     "install:ladder": "node install_chat_ladder.js",
