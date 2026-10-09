@@ -1,0 +1,24 @@
+{
+  "name": "agy-chat-ladder",
+  "version": "1.0.0",
+  "description": "Antigravity 专属长对话微型时间轴与四级天梯导航引擎 (Four-tier conversation timeline & navigation engine for Google Antigravity)",
+  "main": "chat_ladder_core.js",
+  "scripts": {
+    "install:ladder": "node install_chat_ladder.js",
+    "check": "node --check chat_ladder_core.js && node --check install_chat_ladder.js"
+  },
+  "keywords": [
+    "antigravity",
+    "electron",
+    "timeline",
+    "chat-ladder",
+    "navigation",
+    "assistant"
+  ],
+  "author": "SuperRui0122",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SuperRui0122/AgyChatLadder.git"
+  }
+}
