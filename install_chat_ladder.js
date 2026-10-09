@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { execSync } = require('child_process');
 
 console.log('====================================================');
 console.log('   AgyChatLadder (对话天梯) 跨设备一键安装器 v1.2.0    ');
@@ -42,26 +42,16 @@ if (!installDir) {
 }
 console.log('[探测] 成功识别到 Antigravity 安装路径: ' + installDir);
 
-// 2. 检测并解除客户端进程锁定 (防止 Windows EBUSY 文件锁死)
-let wasRunning = false;
+// 2. 检测运行状态并友好提示
+let isAppRunning = false;
 if (process.platform === 'win32') {
   try {
     const tasklist = execSync('tasklist /fi "imagename eq Antigravity.exe" /nh', { encoding: 'utf-8' });
     if (tasklist.toLowerCase().includes('antigravity.exe')) {
-      wasRunning = true;
-      console.log('\n⚠️ [检测] 检测到 Antigravity 客户端正在运行！');
-      console.log('💡 为防止 Windows 系统文件被占用锁定导致安装失败，正在安全退出客户端...');
-      try {
-        execSync('taskkill /f /im Antigravity.exe /t', { stdio: 'ignore' });
-      } catch (e) {}
-      // 等待 2 秒确保所有系统句柄完全释放
-      const waitStart = Date.now();
-      while (Date.now() - waitStart < 2000) {}
-      console.log('✅ [完成] Antigravity 客户端已安全退出，开始执行物理注入。\n');
+      isAppRunning = true;
+      console.log('[提示] 检测到 Antigravity 客户端正在运行。安装完成后请重启客户端以加载全新天梯。');
     }
-  } catch (e) {
-    // 忽略 tasklist 异常
-  }
+  } catch (e) {}
 }
 
 // 3. 定位 resources 目录与 app.asar
@@ -197,25 +187,14 @@ try {
   console.log('  3. 多分屏深度感知: 左右/上下分屏均自动挂载独立专属天梯，互不干扰');
   console.log('  4. 永久磁盘固化: 重启、刷新客户端均稳定常驻，彻底告别重启失效！\n');
 
-  // 如果此前运行中，自动帮用户重启客户端
-  if (wasRunning) {
-    try {
-      const exePath = path.join(installDir, 'Antigravity.exe');
-      if (fs.existsSync(exePath)) {
-        console.log('🚀 [启动] 正在自动为您重新拉起 Antigravity 客户端...');
-        const child = spawn(exePath, [], { detached: true, stdio: 'ignore' });
-        child.unref();
-        console.log('✅ 客户端已启动，快去体验右侧对话天梯吧！\n');
-      }
-    } catch (e) {
-      console.log('💡 请手动双击启动 Antigravity 体验全新天梯功能。');
-    }
+  if (isAppRunning) {
+    console.log('💡 提示：当前 Antigravity 正在运行中，重启客户端即可直接体验全新天梯！\n');
   } else {
     console.log('💡 现在可以直接启动 Antigravity 客户端体验全新天梯功能了！\n');
   }
 } catch (e) {
   console.error('\n❌ [错误] 覆盖系统文件失败: ' + e.message);
-  console.error('💡 解决办法：请先彻底关闭 Antigravity 客户端，然后再双击运行本脚本即可！\n');
+  console.error('💡 解决办法：请先彻底关闭 Antigravity 客户端，然后再运行本脚本！\n');
   if (fs.existsSync(tempAsar)) fs.unlinkSync(tempAsar);
   if (fs.existsSync(tempUnpacked)) fs.rmSync(tempUnpacked, { recursive: true, force: true });
   if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
