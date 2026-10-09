@@ -10,7 +10,7 @@
 // ==/UserScript==
 
 /**
- * AgyChatLadder (对话天梯) - v1.3.0
+ * AgyChatLadder (对话天梯) - v1.3.1
  * Antigravity 专属长对话微型时间轴与四级天梯导航引擎（支持叠层 ^ 图标、独立悬浮预览卡片与多分屏深度感知）
  * GitHub: https://github.com/SuperRui0122/AgyChatLadder
  * 
@@ -38,22 +38,34 @@
       const targetBody = document.body || document.documentElement;
       if (!targetBody) return false;
 
-      // 1. 清理历史遗留全局旧实例
-      const oldFixed = document.getElementById('agy-chat-ladder-rail');
-      if (oldFixed) oldFixed.remove();
+      // 1. 全量清理历史遗留全局旧实例与旧提示框，绝不残留
+      document.querySelectorAll('.agy-chat-ladder-rail').forEach(r => r.remove());
+      document.querySelectorAll('.ladder-tooltip, .ladder-floating-tooltip').forEach(t => t.remove());
+      const oldStyle = document.getElementById('agy-chat-ladder-style');
+      if (oldStyle) oldStyle.remove();
       const oldLegacyRail = document.getElementById('agy-voyager-rail');
       if (oldLegacyRail) oldLegacyRail.remove();
       const oldLegacyStyle = document.getElementById('agy-voyager-style');
       if (oldLegacyStyle) oldLegacyStyle.remove();
 
+      // 清理 DOM 上可能遗留的句柄
+      document.querySelectorAll('*').forEach(el => {
+        if (el.__agyLadder) el.__agyLadder = null;
+      });
+
       // 2. 注入全局天梯样式
-      let style = document.getElementById('agy-chat-ladder-style');
-      if (!style) {
-        style = document.createElement('style');
-        style.id = 'agy-chat-ladder-style';
-        (document.head || targetBody).appendChild(style);
-      }
+      let style = document.createElement('style');
+      style.id = 'agy-chat-ladder-style';
+      (document.head || targetBody).appendChild(style);
+
       style.textContent = `
+        /* 强制隐藏任何旧版 .ladder-tooltip 残留 */
+        .ladder-tooltip {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+        }
+
         .agy-chat-ladder-rail {
           position: absolute !important;
           right: 12px !important;
@@ -108,6 +120,7 @@
           stroke-linecap: round;
           stroke-linejoin: round;
           display: block;
+          pointer-events: none;
         }
 
         .ladder-line {
@@ -172,7 +185,7 @@
           border: 1px solid rgba(255, 255, 255, 0.2) !important;
           box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65) !important;
           border-radius: 8px !important;
-          padding: 7px 12px !important;
+          padding: 8px 12px !important;
           color: #f3f4f6 !important;
           font-size: 11px !important;
           line-height: 1.45 !important;
@@ -206,7 +219,7 @@
           font-weight: 600;
           color: #10b981;
           font-size: 12px;
-          margin-bottom: 2px;
+          margin-bottom: 3px;
           display: flex;
           align-items: center;
           gap: 4px;
@@ -274,11 +287,6 @@
 
         if (window.getComputedStyle(parent).position === 'static') {
           parent.style.position = 'relative';
-        }
-
-        if (parent.__agyLadder && parent.querySelector('.agy-chat-ladder-rail')) {
-          parent.__agyLadder.update();
-          return;
         }
 
         let existing = parent.querySelector('.agy-chat-ladder-rail');
